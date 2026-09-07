@@ -26,6 +26,14 @@ crontab (每天 03:00)
 | SQLite | 資料庫，儲存於 `instance/volleyball.db`（不進版控） |
 | crontab + rclone | 每日 03:00 備份資料庫並同步到 Google Drive |
 
+### 技術棧
+
+- **語言／框架**：Python 3、Flask 3 + Flask-CORS（單檔 `app.py`，只有一個 `/api` 路由）
+- **資料庫**：SQLite + Flask-SQLAlchemy ORM
+- **前端**：純靜態網頁（HTML/JS，另外部署於 `/var/www/volleyball`，不含在本 repo）
+- **部署**：Gunicorn（4 workers）＋ Nginx 反向代理，systemd 常駐
+- **備份**：crontab 每日 03:00 + rclone 同步到 Google Drive
+
 ## 資料模型
 
 - **Config**：目前公告文字（單筆）。
