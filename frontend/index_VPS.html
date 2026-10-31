@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCJH Volleyball Team</title>
+    <style>
+        :root { 
+            --primary: #1a365d; --secondary: #2b6cb0; --accent: #f6ad55;
+            --danger: #e53e3e; --bg: #f7fafc; --white: #ffffff; --gray: #718096;
+            /* 新增投票專用色 */
+            --vote-bg: #feebc8; --vote-text: #9c4221;
+        }
+        * { 
+            box-sizing: border-box; 
+            -webkit-tap-highlight-color: transparent;
+        }
+        body { 
+            /* 只用裝置內建字型，不連外部字型服務 */
+            font-family: 'Noto Sans TC', "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", "Heiti TC", sans-serif;
+            background: var(--bg); 
+            margin: 0; 
+            color: var(--primary);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        header { 
+            background: var(--primary); 
+            color: var(--white); 
+            padding: 0 15px 0 20px; 
+            height: 60px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            position: sticky; 
+            top: 0; 
+            z-index: 1000; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        }
+        .header-logo {
+            font-weight: 900;
+            font-size: 1.15rem;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(90deg, #fff, var(--accent), #fff);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shine 3s linear infinite, logo-float 2s ease-in-out infinite;
+        }
+        .header-logo::before {
+            content: "🏐";
+            -webkit-text-fill-color: initial;
+            display: inline-block;
+            font-size: 1.3rem;
+            animation: ball-wiggle 2s infinite ease-in-out;
+        }
+        @keyframes shine { to { background-position: 200% center; } }
+        @keyframes logo-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+        @keyframes ball-wiggle { 0%, 100% { transform: rotate(-15deg); } 50% { transform: rotate(15deg) scale(1.1); } }
+
+        /* 新增：投票元件樣式 */
+        .badge-vote { background: var(--vote-bg); color: var(--vote-text); padding: 4px 12px; border-radius: 10px; font-size: 0.75rem; font-weight: 800; display: inline-block; margin-bottom: 10px; }
+        .poll-option { margin-top: 10px; cursor: pointer; position: relative; }
+        .poll-bar-bg { background: #edf2f7; height: 40px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; position: relative; }
+        .poll-bar-fill { background: var(--accent); height: 100%; transition: width 0.6s ease; opacity: 0.4; }
+        .poll-text { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; font-weight: 700; font-size: 0.9rem; }
+
+        .menu-btn {
+            background: rgba(255,255,255,0.1); border: none; color: white; 
+            font-size: 1.3rem; cursor: pointer; width: 40px; height: 40px;
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+        }
+        .drawer-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000;
+            display: none; opacity: 0; transition: 0.3s;
+        }
+        .drawer-overlay.open { display: block; opacity: 1; }
+        .drawer {
+            position: fixed; top: 0; right: -280px; width: 280px; height: 100%;
+            background: var(--white); z-index: 2001; 
+            box-shadow: -5px 0 25px rgba(0,0,0,0.15);
+            transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 25px 20px; display: flex; flex-direction: column;
+        }
+        .drawer.open { right: 0; }
+        .drawer-header {
+            font-weight: 900; font-size: 1.3rem; margin-bottom: 25px; 
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid #f1f5f9; padding-bottom: 15px;
+        }
+        .drawer-item {
+            padding: 14px 15px; border-radius: 12px; margin-bottom: 8px;
+            cursor: pointer; display: flex; align-items: center; gap: 12px;
+            font-weight: 700; transition: 0.2s; color: var(--primary);
+        }
+        .drawer-item:active { background: #f0f4f8; }
+
+        button:disabled {
+            background-color: var(--gray) !important;
+            box-shadow: none !important;
+            transform: none !important;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .btn-sm { padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 500; cursor: pointer; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; margin-left: 5px; }
+        .app-container { max-width: 900px; margin: 0 auto; padding: 15px; }
+
+        @keyframes vball-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .vball-loader { font-size: 3.5rem; display: inline-block; animation: vball-spin 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1); }
+        #loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 3000; }
+        
+        .announcement-card { background: #fffaf0; border: 2px solid var(--accent); border-radius: 18px; padding: 18px; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(246, 173, 85, 0.1); }
+        .announcement-header { font-weight: 900; color: #c05621; margin-bottom: 8px; display: flex; align-items: center; gap: 5px; }
+        
+        .section-title { border-left: 6px solid var(--accent); padding-left: 12px; margin: 30px 0 15px 0; font-size: 1.3rem; font-weight: 900; letter-spacing: 0.5px; }
+        .event-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+        .card { background: var(--white); border-radius: 24px; padding: 22px; border: 1px solid #edf2f7; box-shadow: 0 6px 15px rgba(0,0,0,0.04); transition: transform 0.2s; }
+        .card-past { opacity: 0.75; background: #f8fafc; filter: grayscale(0.8); }
+        
+        .card-title { font-size: 1.35rem; font-weight: 800; margin-bottom: 6px; color: var(--primary); letter-spacing: -0.2px; }
+        .card-date { font-size: 0.9rem; font-weight: 700; color: var(--secondary); margin-bottom: 12px; display: flex; align-items: center; gap: 4px; }
+        .card-desc { font-size: 0.95rem; color: #4a5568; background: #f8fafc; padding: 12px; border-radius: 14px; margin: 12px 0; border-left: 4px solid var(--accent); white-space: pre-wrap; line-height: 1.6; }
+        
+        .ball-count-badge {
+            background: #ebf8ff; color: var(--secondary);
+            padding: 6px 12px; border-radius: 10px; font-size: 0.85rem; font-weight: 800;
+            display: inline-flex; align-items: center; gap: 6px; margin-bottom: 15px;
+            border: 1px solid #bee3f8;
+        }
+
+        .reg-area { background: #f1f5f9; border-radius: 14px; padding: 12px; margin: 12px 0; max-height: 160px; overflow-y: auto; font-size: 0.9rem; }
+        .reg-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #e2e8f0; font-weight: 500; }
+        .reg-item:last-child { border-bottom: none; }
+
+        .btn { width: 100%; padding: 14px; border-radius: 15px; border: none; font-size: 1.05rem; font-weight: 700; cursor: pointer; transition: all 0.2s; letter-spacing: 1px; }
+        .btn-accent { background: var(--accent); color: var(--primary); box-shadow: 0 4px 0 #d69e2e; margin-bottom: 4px; }
+        .btn-accent:active { transform: translateY(3px); box-shadow: 0 1px 0 #d69e2e; }
+        
+        .overlay { 
+            position: fixed; inset: 0; background: var(--white); z-index: 2000; 
+            padding: 20px; /* 縮小內距，讓內容更寬 */
+            display: none; flex-direction: column; overflow-y: auto; 
+        }
+        input, textarea, select { 
+            font-family: inherit; 
+            width: 100%; 
+            display: block; /* ★ 關鍵：強制佔滿整行 */
+            padding: 14px; 
+            border: 2px solid #edf2f7; 
+            border-radius: 12px; 
+            margin-bottom: 15px; /* 增加間距 */
+            font-size: 1rem; 
+            outline: none; 
+            transition: 0.2s; 
+            box-sizing: border-box; /* ★ 關鍵：確保內距不影響寬度 */
+        }
+        
+        /* 建議順便加上這個對焦效果，體驗會更好 */
+        input:focus, textarea:focus, select:focus { 
+            border-color: var(--accent); 
+            background: #fffaf0; 
+            box-shadow: 0 0 0 3px rgba(246, 173, 85, 0.1); 
+        }
+        .admin-label { font-size: 0.85rem; font-weight: 800; color: var(--secondary); margin: 5px 0; display: block; }
+        .poll-option-clean:active {
+            background-color: #fffaf0 !important;
+            border-color: var(--accent) !important;
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+
+<div id="loading-overlay">
+    <div class="vball-loader">🏐</div>
+    <div id="loading-text" style="margin-top:20px; font-weight:700; color:var(--primary); font-size: 1.1rem; letter-spacing: 2px;">正在撿球中...</div>
+</div>
+
+<header>
+    <div class="header-logo" onclick="location.reload()">TCJH_VOLLEYBALL_TEAM</div>
+    <button class="menu-btn" onclick="toggleDrawer(true)">☰</button>
+</header>
+
+<div id="drawer-overlay" class="drawer-overlay" onclick="toggleDrawer(false)"></div>
+<div id="drawer" class="drawer">
+    <div class="drawer-header">
+        <span>選單</span>
+        <button style="background:none; border:none; font-size:1.8rem; cursor:pointer;" onclick="toggleDrawer(false)">×</button>
+    </div>
+    <div class="drawer-item" onclick="showInstruction()">📖 使用說明</div>
+    <hr style="width:100%; opacity:0.1; margin: 15px 0;">
+    <div id="drawer-admin-tools">
+        <div class="drawer-item" onclick="checkAdmin()">⚙️ 管理員登入</div>
+    </div>
+</div>
+
+<div class="app-container">
+    <div class="announcement-card">
+        <div class="announcement-header">🏐 公告與守則 🏐</div>
+        <div id="announcement-text" style="font-size:1rem; line-height: 1.6; font-weight: 400;">...</div>
+    </div>
+
+    <div class="section-title" style="border-color: var(--accent);">📊 意願調查中</div>
+    <div id="vote-list" class="event-grid"></div>
+
+    <div class="section-title">🔥 即將進行的練習</div>
+    <div id="event-list" class="event-grid"></div>
+
+    <div class="section-title" style="color:var(--gray); border-color:var(--gray); opacity: 0.6;">⌛ 歷史場次</div>
+    <div id="past-list" class="event-grid"></div>
+</div>
+
+<div id="admin-overlay" class="overlay">
+    <button class="btn-sm" style="color:var(--primary); width:80px; margin-bottom:20px; border-color: var(--primary); background: #eee;" onclick="closeOverlay()">← 返回</button>
+    
+    <label class="admin-label">📢 更新公告內容</label>
+    <textarea id="admin-ann-input" style="height: 250px !important; min-height: 100px;" placeholder="請輸入最新的公告事項..."></textarea>
+    <button class="btn btn-accent" style="margin-bottom:20px;" onclick="updateAnn()">發布新公告</button>
+    
+    <hr style="opacity:0.1; margin: 20px 0;">
+    
+    <h3 style="font-weight:900;">🆕 新增項目</h3>
+    <label class="admin-label">發布模式</label>
+    <select id="admin-mode-select" onchange="switchAdminUI()">
+        <option value="active">一般報名模式</option>
+        <option value="vote">投票意願模式</option>
+    </select>
+
+    <label class="admin-label">標題</label>
+    <input type="text" id="admin-title" placeholder="例如：週日練習 / 寒訓日期調查">
+
+    <div id="admin-ui-active">
+        <label class="admin-label">練球日期與時間</label>
+        <input type="datetime-local" id="admin-date">
+        
+        <label class="admin-label">人數限制 (必填)</label>
+        <input type="number" id="admin-max" placeholder="請輸入 1~18" min="1" max="18" onkeypress="return event.charCode >= 48 && event.charCode <= 57">
+        
+        <label class="admin-label">備註 (填寫菜單)</label>
+        <textarea id="admin-desc" rows="3"></textarea>
+    </div>
+
+<div id="admin-ui-vote" style="display:none;">
+    <label class="admin-label">投票截止時間</label>
+    <input type="datetime-local" id="admin-deadline">
+    
+    <label class="admin-label">場次人數上限 (必填)</label>
+    <input type="number" id="admin-vote-max" placeholder="請輸入 1~18" min="1" max="18" onkeypress="return event.charCode >= 48 && event.charCode <= 57">
+
+    <label class="admin-label">注意事項 / 預計課表 (切換後會保留)</label>
+    <textarea id="admin-vote-desc" rows="3" placeholder="例如：當天會練習攔網，請帶乾淨球鞋..."></textarea>
+
+    <label class="admin-label">選項數量 (2~4個)</label>
+    <select id="admin-vote-count" onchange="renderVoteInputs()">
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+    </select>
+    <div id="admin-vote-options-area"></div>
+    </div> <button class="btn btn-accent" style="margin-top:20px; margin-bottom:40px;" onclick="addNewEvent()">發布項目</button>
+</div>
+
+<div id="reg-overlay" class="overlay">
+    <button class="btn-sm" style="color:var(--primary); width:80px; margin-bottom:20px; border-color: var(--primary); background: #eee;" onclick="closeOverlay()">← 返回</button>
+    <h2 id="reg-title" style="font-weight:900;">報名</h2>
+    <input type="hidden" id="reg-event-id">
+    <input type="text" id="reg-name" placeholder="你的姓名">
+    <input type="number" id="reg-balls" placeholder="攜帶球數 (0~10)" min="0" max="10">
+    <textarea id="reg-note" rows="3" placeholder="備註"></textarea>
+    <button class="btn btn-accent" onclick="submitRegistration()">確認報名</button>
+</div>
+
+<div id="vote-overlay" class="overlay">
+    <button class="btn-sm" style="color:var(--primary); width:80px; margin-bottom:20px; border-color: var(--primary); background: #eee;" onclick="closeOverlay()">← 返回</button>
+    <h2 id="vote-popup-title" style="font-weight:900;">投票意願</h2>
+    <p id="vote-popup-choice" style="font-weight:800; color:var(--secondary); font-size:1.1rem;"></p>
+    <input type="hidden" id="vote-event-id">
+    <input type="hidden" id="vote-choice-val">
+    <input type="text" id="vote-user-name" placeholder="請輸入您的姓名">
+    <button class="btn btn-accent" onclick="submitVote()">確認送出</button>
+</div>
+
+<div id="cancel-overlay" class="overlay">
+    <button class="btn-sm" style="color:var(--primary); width:80px; margin-bottom:20px; border-color: var(--primary); background: #eee;" onclick="closeOverlay()">← 返回</button>
+    <h2 style="font-weight:900;">取消紀錄</h2>
+    <p style="font-size:0.95rem; color:var(--danger); font-weight: 500;">* 請輸入您當時使用的姓名</p>
+    <input type="hidden" id="cancel-event-id">
+    <input type="text" id="cancel-name" placeholder="請輸入姓名">
+    <button class="btn" style="background:var(--danger); color:white;" onclick="submitCancel()">確認取消</button>
+</div>
+    
+<div id="cancel-vote-overlay" class="overlay">
+    <button class="btn-sm" style="color:var(--primary); width:80px; margin-bottom:20px; border-color: var(--primary); background: #eee;" onclick="closeOverlay()">← 返回</button>
+    <h2 style="font-weight:900;">撤回投票意願</h2>
+    <p style="font-size:0.95rem; color:var(--danger); font-weight: 500;">* 請輸入您當時投票使用的姓名</p>
+    <input type="hidden" id="cancel-vote-event-id">
+    <input type="hidden" id="cancel-vote-choice">
+    <input type="text" id="cancel-vote-name" placeholder="請輸入姓名">
+    <button class="btn" style="background:var(--danger); color:white;" onclick="submitCancelVote()">確認撤回</button>
+</div>
+
+<script>
+    // 防範 XSS 攻擊的字串過濾函式
+    function escapeHTML(str) {
+        if (typeof str !== 'string') return str;
+        return str.replace(/[&<>'"]/g, 
+            tag => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[tag] || tag)
+        );
+    }
+    const GAS_URL = "/api"; 
+    let isAdminMode = false;
+    let currentAdminPwd = sessionStorage.getItem('admin_pwd') || "";
+
+    // 管理員切換 UI
+    function switchAdminUI() {
+        const mode = document.getElementById('admin-mode-select').value;
+        document.getElementById('admin-ui-active').style.display = (mode === 'active' ? 'block' : 'none');
+        document.getElementById('admin-ui-vote').style.display = (mode === 'vote' ? 'block' : 'none');
+        if(mode === 'vote') {
+                renderVoteInputs();
+        }
+    }
+
+    function renderVoteInputs() {
+        const countSelect = document.getElementById('admin-vote-count');
+        const area = document.getElementById('admin-vote-options-area');
+        
+        // 取得目前選擇的數量，並強制限制在 2~4
+        let count = parseInt(countSelect.value);
+        if (count < 2) count = 2;
+        if (count > 4) count = 4;
+    
+        // 先清空區域，避免舊欄位堆疊
+        area.innerHTML = ""; 
+    
+        // 根據數量產生對應的輸入框
+        for(let i = 1; i <= count; i++) {
+            const label = document.createElement('label');
+            label.className = 'admin-label';
+            label.style.fontSize = '0.75rem';
+            label.innerText = `選項 ${i}`;
+            
+            const input = document.createElement('input');
+            input.type = 'datetime-local';
+            input.className = 'vote-opt-input';
+            input.style.marginBottom = '8px';
+            
+            area.appendChild(label);
+            area.appendChild(input);
+        }
+    }
+
+    async function sendData(payload) {
+        const loader = document.getElementById('loading-overlay');
+        try {
+            loader.style.display = 'flex';
+            
+            if (isAdminMode || payload.type === 'verify') {
+                payload.adminPassword = currentAdminPwd;
+            }
+    
+            // 驗證密碼時需要回傳值，不使用 no-cors
+            // 發布資料時若怕 CORS 失敗，才考慮切換模式
+
+	    const fetchOptions = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            };
+    
+
+            const res = await fetch(GAS_URL, fetchOptions);
+            const result = await res.json();
+    
+            if (result.status === "success") {
+                if (payload.type === 'verify') {
+                    isAdminMode = true;
+                    sessionStorage.setItem('admin_pwd', currentAdminPwd);
+                    updateUIForAdmin();
+                    showCreate();
+		    fetchData();
+                } else {
+                    alert("操作成功！");
+                    const inputs = document.querySelectorAll('input, textarea');
+                    inputs.forEach(input => {
+                        // 排除掉隱藏欄位與管理密碼，其他都清空
+                        if (input.type !== 'hidden' && input.id !== 'adminPassword') {
+                            input.value = "";
+                        }
+                    });
+                    // 特別重設下拉選單 (選回第一個)
+                    const selects = document.querySelectorAll('select');
+                    selects.forEach(s => s.selectedIndex = 0);
+                    closeOverlay();
+                    await fetchData();
+                }
+            } else {
+                alert("失敗：" + result.message);
+            }
+        } catch (e) {
+            console.error(e);
+            // 如果是因為 CORS 失敗，嘗試提醒使用者
+            alert("連線伺服器失敗，請確認 GAS 部署設定為「所有人」皆可存取。");
+        } finally {
+            loader.style.display = 'none';
+        }
+    }
+
+    async function fetchData() {
+        document.getElementById('loading-overlay').style.display = 'flex';
+        try {
+            const resp = await fetch(GAS_URL);
+            const data = await resp.json();
+            document.getElementById('announcement-text').innerText = data.announcement;
+            renderAll(data);
+        } finally {
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+    }
+
+    function renderAll(data) {
+        const voteList = document.getElementById('vote-list');
+        const activeList = document.getElementById('event-list');
+        const pastList = document.getElementById('past-list');
+        
+        // 初始化清空
+        voteList.innerHTML = "";
+        activeList.innerHTML = "";
+        pastList.innerHTML = "";
+    
+        if (!data.events || data.events.length === 0) {
+            const noDataHtml = "<p style='padding:15px; color:var(--gray); font-weight:500;'>目前暫無場次資料</p>";
+            voteList.innerHTML = noDataHtml;
+            activeList.innerHTML = noDataHtml;
+            pastList.innerHTML = noDataHtml;
+            return;
+        }
+    
+        // 分流處理
+        data.events.forEach(ev => {
+            if (ev.status === 'vote') {
+                voteList.innerHTML += createVoteCard(ev, data.votes); 
+            } else if (ev.status === 'active') {
+                activeList.innerHTML += createCard(ev, data.regs, false);
+            } else if (ev.status === 'archive' || ev.status === 'past') {
+                pastList.innerHTML += createCard(ev, data.regs, true);
+            }
+        });
+    
+        // 檢查各區塊是否為空，若為空則顯示提示字眼
+        const emptyMsg = (text) => `<p style='padding:15px; color:var(--gray); font-weight:500;'>${text}</p>`;
+    
+        if (voteList.innerHTML === "") voteList.innerHTML = emptyMsg("✨ 目前沒有正在進行的調查");
+        if (activeList.innerHTML === "") activeList.innerHTML = emptyMsg("🏐 目前沒有即將進行的練習");
+        if (pastList.innerHTML === "") pastList.innerHTML = emptyMsg("📅 目前沒有歷史場次紀錄");
+    }
+    
+    // 2. 修改  函數：修正過濾邏輯
+    function createVoteCard(ev, allVotes) {
+            const id = String(ev.event_id).trim();
+            const opts = ev.options ? ev.options.split(',').map(o => o.trim()).filter(o => o !== "") : [];
+            const safeVotes = Array.isArray(allVotes) ? allVotes : [];
+            
+            const evVotes = safeVotes.filter(v => String(v[0]).trim() === id);
+            const totalVotesCount = evVotes.length; // 該場次總投票人數
+            
+            const d = new Date(ev.date);
+            const formattedDeadline = `${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+            const maxVoteInfo = ev.max > 0 ? ` (預計徵求 ${ev.max} 人)` : "";
+            
+            let html = `
+                <div class="card" style="border: 2px solid var(--accent); position: relative; padding: 22px;">
+                    <div class="badge-vote">🗳️ 意願調查中</div>
+                    <div class="card-title">${escapeHTML(ev.title)}${maxVoteInfo}</div>
+                    <div style="color: var(--danger); font-size: 0.85rem; font-weight: 700; margin-bottom: 15px;">
+                        ⏱️ 截止時間：${formattedDeadline}
+                    </div>
+                    <div style="display: grid; gap: 10px; margin-bottom: 20px;">`;
+        
+                opts.forEach(opt => {
+                    const targetOption = String(opt).trim();
+                    
+                    // 找出選擇此選項的人
+                    const voters = evVotes
+                        .filter(v => {
+                            const voteChoice = String(v[2]).trim();
+                            const d1 = new Date(voteChoice).getTime();
+                            const d2 = new Date(targetOption).getTime();
+                            return (!isNaN(d1) && !isNaN(d2)) ? d1 === d2 : voteChoice === targetOption;
+                        })
+                        .map(v => String(v[1]).trim());
+    
+                    // --- 修正點：定義缺失的變數 ---
+                    const voteCount = voters.length;
+                    // 計算進度條寬度 (若總票數為 0 則顯示 0%)
+                    const barWidth = totalVotesCount > 0 ? (voteCount / totalVotesCount) * 100 : 0;
+                    
+                    // 格式化顯示選項（如果是日期就轉成 MM/DD，否則顯示原文字）
+                    const optDate = new Date(targetOption);
+                    const displayOpt = !isNaN(optDate.getTime()) 
+                        ? `${optDate.getFullYear()}-${(optDate.getMonth() + 1).toString().padStart(2, '0')}-${optDate.getDate().toString().padStart(2, '0')} ${optDate.getHours()}:${optDate.getMinutes().toString().padStart(2, '0')}`
+                        : targetOption;
+                    // ----------------------------
+        
+                    html += `
+                    <div class="poll-option" onclick="handleVoteClick('${id}', '${encodeURIComponent(ev.title)}', '${encodeURIComponent(targetOption)}')">
+                        <div class="poll-bar-bg">
+                            <div class="poll-bar-fill" style="width: ${barWidth}%"></div>
+                            <div class="poll-text">
+                                <span>${escapeHTML(displayOpt)}</span>
+                                <span>${voteCount} 票</span>
+                            </div>
+                        </div>
+                        <div style="font-size:0.75rem; color:var(--gray); margin-top:4px; padding-left:5px; font-weight:500;">
+                            👥 ${voters.length > 0 ? escapeHTML(voters.join(', ')) : '暫無人選擇此項'}
+                        </div>
+                    </div>`;
+            });
+        
+            html += `
+                    </div>
+                    <div class="card-actions" style="display:flex; flex-direction:column; gap:8px;">
+                        <button class="btn" style="background:#f1f5f9; color:var(--gray); font-size:0.9rem;" onclick="openCancelVote('${id}')">撤回我的投票</button>
+                        ${isAdminMode ? `<button class="btn" style="background:#fff; color:var(--danger); border:1.5px solid #fed7d7; font-size:0.9rem; margin-top:5px;" onclick="deleteEvent('${id}')">🗑️ 刪除此投票</button>` : ''}
+                    </div>
+                </div>`;
+            return html;
+        }
+    
+    // 投票點擊觸發
+    function handleVoteClick(id, title, choice) {
+        // 開啟你已經寫好的 vote-overlay
+        openVote(id, decodeURIComponent(title), decodeURIComponent(choice));
+    }
+    
+    // 3. 修改報名卡片函數 (對應物件格式)
+    function createCard(ev, allRegs, isPast) {
+            const id = ev.event_id;
+            
+            // --- 修改時間格式化邏輯 ---
+            const d = new Date(ev.date);
+            const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+            const formattedDate = `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')} (${dayNames[d.getDay()]}) ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+            
+            // 區分顯示邏輯：歷史場次 vs 進行中場次
+            let contentHtml = '';
+            let badgeHtml = '';
+            let progressHtml = '';
+    
+            if (isPast || ev.isArchived) {
+                // --- A. 歷史場次顯示邏輯 ---
+                // 歷史名單現在存在 ev.options 裡面 (字串: "王小明, 李大同")
+                const memberString = ev.options || ""; 
+                const memberList = memberString ? memberString.split(',') : [];
+                const count = memberList.length;
+    
+                badgeHtml = `<div class="ball-count-badge" style="background:#edf2f7; color:var(--gray); border-color:#cbd5e0;">🏁 活動已結束，共 ${count} 人參與</div>`;
+                
+                // 產生簡單的名單列表
+                const memberItems = memberList.map(m =>
+                    `<div class="reg-item" style="color:#718096;"><span>👤 ${escapeHTML(m.trim())}</span></div>`
+                ).join('');
+                
+                contentHtml = `
+                    <div class="reg-area" style="background:#f7fafc;">
+                        ${memberItems || '<div style="text-align:center; color:var(--gray); padding:10px;">無出席紀錄</div>'}
+                    </div>`;
+    
+            } else {
+                // --- B. 進行中場次顯示邏輯 (維持原本) ---
+                const eventRegs = allRegs ? allRegs.filter(r => String(r[0]) === String(id)) : [];
+                const count = eventRegs.length;
+                const totalBalls = eventRegs.reduce((sum, r) => sum + (parseInt(r[2]) || 0), 0);
+                const progress = Math.min((count / ev.max) * 100, 100);
+    
+                progressHtml = `
+                    <div style="font-size:0.85rem; font-weight:700; display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span>報名進度</span>
+                        <span>${count} / ${ev.max} 人</span>
+                    </div>
+                    <div style="background:#edf2f7; height:10px; border-radius:5px; margin-bottom:10px; overflow:hidden;">
+                        <div style="width:${progress}%; height:100%; background:${count>=ev.max?'var(--danger)':'var(--secondary)'}; transition:width 0.8s ease-out;"></div>
+                    </div>`;
+    
+                badgeHtml = `<div class="ball-count-badge">🏐 當前全隊總球數：${totalBalls}</div>`;
+                
+                contentHtml = `
+                    <div class="reg-area">
+                        ${eventRegs.map(r => `<div class="reg-item"><span>👤 ${escapeHTML(r[1])}</span><span style="color:var(--secondary);">${escapeHTML(String(r[2]))} 球</span></div>`).join('') || '<div style="text-align:center; color:var(--gray); padding:10px;">尚未有人報名</div>'}
+                    </div>`;
+            }
+            
+            return `
+                <div class="card ${isPast ? 'card-past' : ''}">
+                    <div class="card-title">${escapeHTML(ev.title)}</div>
+                    <div class="card-date">📅 ${formattedDate}</div>
+                    <div class="card-desc">${escapeHTML(ev.desc)}</div>
+                    
+                    ${progressHtml}
+                    ${badgeHtml}
+                    ${contentHtml}
+                    
+                    <div class="card-actions" style="display:flex; flex-direction:column; gap:8px; margin-top:15px;">
+                        ${isPast ? '' : `<button class="btn btn-accent" onclick="openReg('${id}', '${encodeURIComponent(ev.title)}')">立即報名</button>`}
+                        ${!isPast ? `<button class="btn" style="background:#f1f5f9; color:var(--gray); font-size:0.9rem;" onclick="openCancel('${id}')">取消我的報名</button>` : ''}
+                        ${isAdminMode ? `<button class="btn" style="background:#fff; color:var(--danger); border:1.5px solid #fed7d7; font-size:0.9rem; margin-top:5px;" onclick="deleteEvent('${id}')">🗑️ 刪除此場次</button>` : ''}
+                    </div>
+                </div>`;
+        }
+
+    function openVote(id, title, choice) {
+        document.getElementById('vote-event-id').value = id;
+        document.getElementById('vote-choice-val').value = choice;
+        document.getElementById('vote-popup-title').innerText = "投票意願調查";
+        document.getElementById('vote-popup-choice').innerText = `【${title}】\n您的選擇：${choice}`;
+        document.getElementById('vote-overlay').style.display = 'flex';
+    }
+
+    function submitVote() {
+        const name = document.getElementById('vote-user-name').value.trim();
+        if(!name) return alert("請輸入姓名");
+        
+        // 鎖定按鈕防止重複點擊
+        const btn = document.querySelector('#vote-overlay .btn-accent');
+        btn.disabled = true;
+        btn.innerText = "傳送中...";
+    
+        sendData({
+            type: 'vote',
+            event_id: document.getElementById('vote-event-id').value,
+            name: name,
+            choice: document.getElementById('vote-choice-val').value
+        }).then(() => {
+            // 重置 UI
+            document.getElementById('vote-user-name').value = "";
+            btn.disabled = false;
+            btn.innerText = "確認送出";
+        });
+    }
+
+    function addNewEvent() {
+        const mode = document.getElementById('admin-mode-select').value;
+        const title = document.getElementById('admin-title').value.trim();
+        if(!title) return alert("請輸入標題");
+    
+        // 取得對應的人數與時間欄位
+        let maxInput = document.getElementById(mode === 'active' ? 'admin-max' : 'admin-vote-max');
+        let rawMax = maxInput.value.trim();
+        let dateVal = document.getElementById(mode === 'active' ? 'admin-date' : 'admin-deadline').value;
+        let descVal = document.getElementById(mode === 'active' ? 'admin-desc' : 'admin-vote-desc').value;
+    
+        // --- 統一的人數驗證邏輯 ---
+        if (rawMax === "") {
+            return alert("「人數限制」為必填項目");
+        }
+    
+        // 檢查是否為純數字字串
+        if (!/^\d+$/.test(rawMax)) {
+            return alert("人數上限僅限輸入整數數字");
+        }
+    
+        let maxVal = parseInt(rawMax);
+        if (maxVal < 0 || maxVal > 99) {
+            return alert("人數上限請設定在 0 到 99 之間");
+        }
+        // ------------------------
+    
+        let optionsVal = "";
+        if (mode === 'vote') {
+            optionsVal = Array.from(document.querySelectorAll('.vote-opt-input'))
+                              .map(i => i.value).filter(v => v).join(',');
+            if(!optionsVal) return alert("請填寫投票選項");
+        }
+    
+        if(!dateVal) return alert("請填寫日期/截止時間");
+    
+        sendData({
+            type: 'createEvent',
+            event_id: 'E' + Date.now(),
+            title: title,
+            date: dateVal,
+            max: maxVal,
+            desc: descVal,     
+            options: optionsVal,
+            status: mode
+        });
+    }
+
+    // --- 以下為原本功能邏輯 (保持不動) ---
+    function toggleDrawer(open) { document.getElementById('drawer').classList.toggle('open', open); document.getElementById('drawer-overlay').classList.toggle('open', open); }
+    function showInstruction() { 
+        toggleDrawer(false); 
+        alert("【使用說明】\n1. 報名：點擊「立即報名」，填寫姓名與球數 (0~10)。\n2. 投票：直接點擊選項「進度條」即可投票。\n3. 管理：若需取消或重投，請使用卡片下方的撤回/取消按鈕。\n4. 紀錄：過期場次將自動移至最下方的歷史區，並顯示出席名單。"); 
+    }
+    function checkAdmin() { toggleDrawer(false); if(isAdminMode) return showCreate(); const p = prompt("請輸入管理密碼"); if(p) { currentAdminPwd = p; sendData({type:'verify'}); } }
+    function updateUIForAdmin() { document.getElementById('drawer-admin-tools').innerHTML = `<div class="drawer-item" onclick="showCreate()" style="background:#fff5f5; color:var(--danger);">⚒️ 進入管理模式</div><div class="drawer-item" onclick="logout()">🚪 登出管理員</div>`; }
+    function logout() { sessionStorage.removeItem('admin_pwd'); location.reload(); }
+    function showCreate() { toggleDrawer(false); document.getElementById('admin-overlay').style.display = 'flex'; switchAdminUI(); }// 打開時先執行一次切換 UI 的邏輯，確保輸入框被畫出來
+    function closeOverlay() { document.querySelectorAll('.overlay').forEach(e => e.style.display = 'none'); }
+    function openReg(id, title) { document.getElementById('reg-overlay').style.display = 'flex'; document.getElementById('reg-event-id').value = id; document.getElementById('reg-title').innerText = '報名：' + decodeURIComponent(title); }
+    function openCancel(eventId) { document.getElementById('cancel-overlay').style.display = 'flex'; document.getElementById('cancel-event-id').value = eventId; }
+    function updateAnn() {
+        const content = document.getElementById('admin-ann-input').value.trim();
+        if(!content) return alert("請輸入公告內容");
+        
+        // 鎖定按鈕防止重複點擊
+        const btn = document.querySelector('button[onclick="updateAnn()"]');
+        const originText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = "發布中...";
+
+        sendData({
+            type: 'updateAnnouncement',
+            content: content
+        }).then(() => {
+            // 復原按鈕狀態並清空輸入框
+            btn.disabled = false;
+            btn.innerText = originText;
+            document.getElementById('admin-ann-input').value = "";
+        });
+    }
+    function submitRegistration() {
+            const name = document.getElementById('reg-name').value.trim();
+            const ballsInput = document.getElementById('reg-balls').value;
+            const balls = parseInt(ballsInput) || 0; // 如果沒填預設為 0
+    
+            if(!name) return alert("請輸入姓名");
+            
+            // --- 新增：球數限制驗證 ---
+            if(balls < 0 || balls > 10) {
+                return alert("攜帶球數請填寫 0 到 10 之間");
+            }
+            // ------------------------
+    
+            // 鎖定按鈕避免重複發送
+            const btn = document.querySelector('#reg-overlay .btn-accent');
+            const originText = btn.innerText;
+            btn.disabled = true;
+            btn.innerText = "報名中...";
+    
+            sendData({ 
+                type: 'register', 
+                event_id: document.getElementById('reg-event-id').value, 
+                name: name, 
+                balls: balls, 
+                note: document.getElementById('reg-note').value 
+            }).then(() => {
+                // 復原按鈕
+                btn.disabled = false;
+                btn.innerText = originText;
+            });
+        }
+    
+    function submitCancel() {
+        const name = document.getElementById('cancel-name').value.trim();
+        const eventId = document.getElementById('cancel-event-id').value; // 取得隱藏欄位值
+        
+        if(!name) return alert("請輸入報名姓名");
+        
+        // 鎖定按鈕防止重複點擊
+        const btn = document.querySelector('#cancel-overlay .btn');
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = "處理中...";
+    
+        sendData({ 
+            type: 'cancelRegistration', 
+            event_id: eventId,  // 確保是 event_id
+            name: name 
+        }).then(() => {
+            btn.disabled = false;
+            btn.innerText = originalText;
+            document.getElementById('cancel-name').value = ""; // 清空輸入框
+        });
+    }
+    
+    function deleteEvent(id) {
+        if(confirm("確定要刪除嗎？相關紀錄也會同步刪除。")) { 
+            sendData({ type: 'deleteEvent', event_id: id }); // 改為 event_id
+        }
+    }
+
+    (async () => {
+        if (currentAdminPwd) {
+            try {
+                const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({type:'verify', adminPassword: currentAdminPwd}) });
+                const r = await res.json(); 
+                if (r.status === "success") { isAdminMode = true; updateUIForAdmin(); }
+            } catch(e) {}
+        }
+        fetchData();
+    })();
+    
+    function openCancelVote(eventId) {
+        document.getElementById('cancel-vote-overlay').style.display = 'flex';
+        document.getElementById('cancel-vote-event-id').value = eventId;
+    }
+    
+    function submitCancelVote() {
+        const name = document.getElementById('cancel-vote-name').value.trim();
+        const eventId = document.getElementById('cancel-vote-event-id').value;
+        
+        if(!name) return alert("請輸入姓名");
+        
+        const btn = document.querySelector('#cancel-vote-overlay .btn');
+        btn.disabled = true;
+        btn.innerText = "撤回中...";
+    
+        sendData({ 
+            type: 'cancelVote', // 對應 GAS 後端的動作
+            event_id: eventId,
+            name: name 
+        }).then(() => {
+            btn.disabled = false;
+            btn.innerText = "確認撤回";
+            document.getElementById('cancel-vote-name').value = "";
+        });
+    }
+    
+    function archiveEvent(id) {
+        if(confirm("確定要將此場次存入歷史紀錄嗎？存檔後將無法再報名。")) {
+            sendData({
+                type: 'archiveEvent',
+                event_id: id
+            });
+        }
+    }
+</script>
+</body>
+</html>
+
