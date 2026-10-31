@@ -1,0 +1,5 @@
+# /etc/cron.d/volleyball — 每天 03:00 以 volleyball 帳號備份資料庫
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+0 3 * * * volleyball /opt/volleyball/deploy/backup.sh >> /var/log/volleyball/backup.log 2>&1
