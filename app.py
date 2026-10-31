@@ -8,13 +8,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
-CORS(app)
+# 前端與 API 同網域，只允許自己的網域跨來源呼叫
+CORS(app, origins=["https://tcjhvolley.felidae.tw"])
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///volleyball.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-admin_plain_pwd = os.getenv('ADMIN_PWD', 'fallback_random_string_xyz')
+admin_plain_pwd = os.getenv('ADMIN_PWD')
+if not admin_plain_pwd:
+    raise RuntimeError("ADMIN_PWD 未設定，請在 .env 填入後台管理密碼")
 ADMIN_PWD_HASH = generate_password_hash(admin_plain_pwd)
 
 # ==========================================
@@ -56,6 +59,10 @@ class Archive(db.Model):
     desc = db.Column(db.Text, default="")
     status = db.Column(db.String(20), default="archive")
     members = db.Column(db.Text, default="")
+
+# 用 gunicorn 啟動時不會跑 __main__，所以在載入時建表（已存在的表不會動）
+with app.app_context():
+    db.create_all()
 
 # ==========================================
 # 輔助函式
@@ -170,6 +177,9 @@ def handle_post():
 
         elif action_type == 'updateAnnouncement':
             config = Config.query.first()
+            if config is None:  # 全新資料庫還沒有公告列
+                config = Config()
+                db.session.add(config)
             config.announcement = data.get('content', '')
             db.session.commit()
             return jsonify({"status": "success"})
