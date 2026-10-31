@@ -1,5 +1,10 @@
-# /etc/cron.d/volleyball — 每天 03:00 以 volleyball 帳號備份資料庫
+# /etc/cron.d/volleyball — 以 volleyball 帳號執行
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 
+# 每分鐘：結算到期的投票、封存過期場次（網頁讀取 API 時不再改資料）
+# flock -n：上一次還沒跑完就跳過，不會重疊執行
+* * * * * volleyball cd /opt/volleyball && flock -n /var/lib/volleyball/maintenance.lock venv/bin/flask --app app maintenance >> /var/log/volleyball/maintenance.log 2>&1
+
+# 每天 03:00 備份資料庫
 0 3 * * * volleyball /opt/volleyball/deploy/backup.sh >> /var/log/volleyball/backup.log 2>&1

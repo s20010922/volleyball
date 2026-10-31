@@ -3,8 +3,9 @@
 土中排球練習的報名網站：https://tcjhvolley.felidae.tw
 
 - **公告**：管理員發布的公告與守則
-- **報名場次**：設定人數上限，報名時填姓名、攜帶球數、備註；額滿或重複報名會被擋下
+- **報名場次**：設定人數上限，報名時填姓名、攜帶球數、備註；額滿、重複報名、場次已開始都會被擋下
 - **投票喬時間**：列出幾個候選時間讓大家投票，截止後自動以最高票的時間開放報名
+- **取消／撤回**：只能在報名（投票）時使用的同一台裝置上取消；換了裝置由管理員協助
 - **自動封存**：場次時間過了自動移到歷史紀錄，保留最終名單
 - **管理員模式**：輸入管理密碼後可新增／刪除／封存場次、發布公告
 
@@ -18,6 +19,7 @@ Nginx (tcjhvolley.felidae.tw)
   ├─ /      → frontend/index.html（靜態檔）
   └─ /api   → Gunicorn 127.0.0.1:5000 → app.py (Flask) → SQLite instance/volleyball.db
 
+cron 每分鐘   → flask --app app maintenance → 結算到期投票、封存過期場次
 cron 每天 03:00 → deploy/backup.sh → /var/lib/volleyball/backups → rclone → Google Drive
 ```
 
@@ -38,7 +40,7 @@ deploy/
   volleyball.service        systemd 服務（含沙箱設定）
   nginx.conf                Nginx 站台設定（含頻率限制、安全標頭）
   backup.sh                 每日備份腳本
-  volleyball.cron           備份排程（裝到 /etc/cron.d/volleyball）
+  volleyball.cron           排程：每分鐘維護、每天備份（裝到 /etc/cron.d/volleyball）
   fail2ban-filter.conf      fail2ban：比對管理密碼錯誤
   fail2ban-jail.conf        fail2ban：封鎖規則
 ```
@@ -49,18 +51,20 @@ deploy/
 |--------|------|
 | `Config` | 公告文字（單筆） |
 | `Event` | 進行中的場次，`status` 為 `active`（開放報名）或 `vote`（投票中） |
-| `Registration` | 報名紀錄：場次、姓名、攜帶球數、備註 |
-| `Vote` | 投票紀錄：場次、姓名、選擇的時間 |
+| `Registration` | 報名紀錄：場次、姓名、攜帶球數、備註、取消碼雜湊；`(場次, 姓名)` 唯一 |
+| `Vote` | 投票紀錄：場次、姓名、選擇的時間、取消碼雜湊；`(場次, 姓名)` 唯一 |
 | `Archive` | 已結束的場次，含最終報名名單 |
 
-資料表在 app 載入時自動建立（`db.create_all()`，已存在的表不會被動到）。
+資料表在 app 載入時自動建立；舊版資料庫會自動補上新欄位與唯一索引（`migrate_schema()`，可重複執行）。
 
 ## API
 
 只有 `/api` 一個路徑，`POST` 用 JSON body 的 `type` 欄位區分動作，必須帶 `Content-Type: application/json`。
 
-**`GET /api`**：回傳公告、所有場次（含封存）、報名與投票紀錄。每次呼叫會先自動處理：
-投票已截止的場次依最高票定案（沒人投票就直接封存），時間已過的場次移入 `Archive`。
+**`GET /api`**：回傳公告、所有場次（含封存）、報名與投票紀錄。**只讀不寫**。
+
+到期處理由 cron 每分鐘執行 `flask --app app maintenance`：投票已截止的場次依最高票定案（沒人投票就封存），
+時間已過的場次移入 `Archive`。在排程跑到之前，過期場次已經不能報名、截止的投票也不能再投。
 
 **`POST /api`**
 
@@ -72,12 +76,15 @@ deploy/
 | `convertToActive` | ✓ | 投票場次手動轉為開放報名，可同時改標題／日期 |
 | `archiveEvent` | ✓ | 手動封存場次 |
 | `deleteEvent` | ✓ | 刪除場次及其報名／投票紀錄 |
-| `register` | | 報名 |
-| `cancelRegistration` | | 依姓名取消報名 |
-| `vote` | | 投票（每人每場一次） |
-| `cancelVote` | | 依姓名撤回投票 |
+| `register` | | 報名；成功時回傳 `cancelToken` |
+| `cancelRegistration` | 取消碼或管理密碼 | 取消報名，需帶 `cancel_token` |
+| `vote` | | 投票（每人每場一次）；成功時回傳 `cancelToken` |
+| `cancelVote` | 取消碼或管理密碼 | 撤回投票，需帶 `cancel_token` |
 
-管理動作用 `adminPassword` 欄位帶密碼；密碼錯誤回 `403`。
+- 管理動作用 `adminPassword` 欄位帶密碼；密碼錯誤回 `403`（取消時帶了錯誤的管理密碼也一樣，讓 fail2ban 計數）。
+- 取消碼是報名成功時產生的隨機字串，前端存在瀏覽器的 `localStorage`；資料庫只存它的 SHA-256。
+- 回應的 `status`：`success` 成功、`fail` 不符合規則（額滿、重複、輸入錯誤等，訊息可直接顯示），
+  `error` 系統錯誤（只回「系統發生錯誤，請稍後再試」，詳細內容寫在伺服器 log）。
 
 ## 環境變數
 
@@ -144,8 +151,9 @@ sudo systemctl restart volleyball     # 只改前端時不需要重啟
 
 ```bash
 systemctl status volleyball
-sudo journalctl -u volleyball -f            # 服務 log
-sudo tail /var/log/volleyball/backup.log    # 備份 log
+sudo journalctl -u volleyball -f                 # 服務 log（含系統錯誤的完整內容）
+sudo tail /var/log/volleyball/maintenance.log    # 每分鐘維護有做事時才會寫
+sudo tail /var/log/volleyball/backup.log         # 備份 log
 ```
 
 ### 備份與還原
@@ -171,6 +179,12 @@ sudo sed -i 's/^ADMIN_PWD=.*/ADMIN_PWD=新密碼/' /opt/volleyball/.env
 sudo systemctl restart volleyball      # 密碼只在啟動時讀取
 ```
 
+### 手動執行維護（結算投票、封存過期場次）
+
+```bash
+cd /opt/volleyball && sudo -u volleyball venv/bin/flask --app app maintenance
+```
+
 ### 解除 fail2ban 封鎖
 
 ```bash
@@ -187,11 +201,15 @@ sudo fail2ban-client set volleyball-admin unbanip <IP>
   fail2ban 在 10 分鐘內密碼錯 5 次時封鎖該 IP
 - **HTTPS**：Let's Encrypt 憑證，HTTP 一律轉 HTTPS；安全標頭（HSTS、`X-Frame-Options`、`nosniff`、`Referrer-Policy`）
   共用 `/etc/nginx/snippets/isirl-security-headers.conf`；`server_tokens off`
+- **取消要驗證**：取消報名／撤回投票需要報名時發的取消碼（或管理密碼），知道別人的姓名也無法幫他取消
+- **錯誤不外洩**：系統錯誤只回通用訊息，例外內容只寫進伺服器 log；輸入（長度、數字範圍、日期格式、投票選項）都先檢查
+- **併發安全**：名額檢查與新增在同一道 SQL 完成，`(場次, 姓名)` 有唯一索引，同時搶名額或連點都不會超收、重複
 - **防 XSS**：前端把使用者輸入的內容一律經過 `escapeHTML` 再顯示
 - **不允許跨網域呼叫**：前端與 API 同網域，沒有 CORS 標頭，其他網站的 JavaScript 讀不到 API 回應
 
 ## 已知限制
 
-- 取消報名、撤回投票只比對姓名，任何人輸入別人的姓名就能取消對方的報名
+- 取消碼存在瀏覽器裡：換手機、清除瀏覽資料或用無痕模式報名後，只能請管理員取消
 - 只有一組共用的管理密碼，沒有個別帳號
+- 同名的兩個人無法報名同一場（用姓名區分報名者）
 - SQLite 單機資料庫，備份只在每天 03:00 跑一次

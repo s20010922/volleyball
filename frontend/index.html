@@ -320,7 +320,20 @@
             }[tag] || tag)
         );
     }
-    const GAS_URL = "/api"; 
+    const GAS_URL = "/api";
+
+    // 報名／投票成功時伺服器發的取消碼，存在這台裝置上；取消時要附上才能取消
+    function tokenKey(kind, eventId, name) { return `vb_cancel:${kind}:${eventId}:${name}`; }
+    function saveCancelToken(kind, eventId, name, token) {
+        try { if (token) localStorage.setItem(tokenKey(kind, eventId, name), token); } catch (e) {}
+    }
+    function loadCancelToken(kind, eventId, name) {
+        try { return localStorage.getItem(tokenKey(kind, eventId, name)) || ""; } catch (e) { return ""; }
+    }
+    function removeCancelToken(kind, eventId, name) {
+        try { localStorage.removeItem(tokenKey(kind, eventId, name)); } catch (e) {}
+    }
+
     let isAdminMode = false;
     let currentAdminPwd = sessionStorage.getItem('admin_pwd') || "";
 
@@ -385,8 +398,12 @@
     
 
             const res = await fetch(GAS_URL, fetchOptions);
+            if (res.status === 429) {
+                alert("操作太頻繁，請稍等一分鐘再試。");
+                return null;
+            }
             const result = await res.json();
-    
+
             if (result.status === "success") {
                 if (payload.type === 'verify') {
                     isAdminMode = true;
@@ -412,10 +429,11 @@
             } else {
                 alert("失敗：" + result.message);
             }
+            return result;
         } catch (e) {
             console.error(e);
-            // 如果是因為 CORS 失敗，嘗試提醒使用者
-            alert("連線伺服器失敗，請確認 GAS 部署設定為「所有人」皆可存取。");
+            alert("連線伺服器失敗，請檢查網路後再試一次。");
+            return null;
         } finally {
             loader.style.display = 'none';
         }
@@ -640,12 +658,14 @@
         btn.disabled = true;
         btn.innerText = "傳送中...";
     
+        const eventId = document.getElementById('vote-event-id').value;
         sendData({
             type: 'vote',
-            event_id: document.getElementById('vote-event-id').value,
+            event_id: eventId,
             name: name,
             choice: document.getElementById('vote-choice-val').value
-        }).then(() => {
+        }).then((result) => {
+            if (result && result.status === "success") saveCancelToken('vote', eventId, name, result.cancelToken);
             // 重置 UI
             document.getElementById('vote-user-name').value = "";
             btn.disabled = false;
@@ -691,7 +711,6 @@
     
         sendData({
             type: 'createEvent',
-            event_id: 'E' + Date.now(),
             title: title,
             date: dateVal,
             max: maxVal,
@@ -705,7 +724,7 @@
     function toggleDrawer(open) { document.getElementById('drawer').classList.toggle('open', open); document.getElementById('drawer-overlay').classList.toggle('open', open); }
     function showInstruction() { 
         toggleDrawer(false); 
-        alert("【使用說明】\n1. 報名：點擊「立即報名」，填寫姓名與球數 (0~10)。\n2. 投票：直接點擊選項「進度條」即可投票。\n3. 管理：若需取消或重投，請使用卡片下方的撤回/取消按鈕。\n4. 紀錄：過期場次將自動移至最下方的歷史區，並顯示出席名單。"); 
+        alert("【使用說明】\n1. 報名：點擊「立即報名」，填寫姓名與球數 (0~10)。\n2. 投票：直接點擊選項「進度條」即可投票。\n3. 管理：若需取消或重投，請使用卡片下方的撤回/取消按鈕（需使用報名時的同一台手機或電腦，換裝置請聯絡管理員）。\n4. 紀錄：過期場次將自動移至最下方的歷史區，並顯示出席名單。"); 
     }
     function checkAdmin() { toggleDrawer(false); if(isAdminMode) return showCreate(); const p = prompt("請輸入管理密碼"); if(p) { currentAdminPwd = p; sendData({type:'verify'}); } }
     function updateUIForAdmin() { document.getElementById('drawer-admin-tools').innerHTML = `<div class="drawer-item" onclick="showCreate()" style="background:#fff5f5; color:var(--danger);">⚒️ 進入管理模式</div><div class="drawer-item" onclick="logout()">🚪 登出管理員</div>`; }
@@ -753,13 +772,15 @@
             btn.disabled = true;
             btn.innerText = "報名中...";
     
-            sendData({ 
-                type: 'register', 
-                event_id: document.getElementById('reg-event-id').value, 
-                name: name, 
-                balls: balls, 
-                note: document.getElementById('reg-note').value 
-            }).then(() => {
+            const eventId = document.getElementById('reg-event-id').value;
+            sendData({
+                type: 'register',
+                event_id: eventId,
+                name: name,
+                balls: balls,
+                note: document.getElementById('reg-note').value
+            }).then((result) => {
+                if (result && result.status === "success") saveCancelToken('reg', eventId, name, result.cancelToken);
                 // 復原按鈕
                 btn.disabled = false;
                 btn.innerText = originText;
@@ -778,11 +799,13 @@
         btn.disabled = true;
         btn.innerText = "處理中...";
     
-        sendData({ 
-            type: 'cancelRegistration', 
+        sendData({
+            type: 'cancelRegistration',
             event_id: eventId,  // 確保是 event_id
-            name: name 
-        }).then(() => {
+            name: name,
+            cancel_token: loadCancelToken('reg', eventId, name)
+        }).then((result) => {
+            if (result && result.status === "success") removeCancelToken('reg', eventId, name);
             btn.disabled = false;
             btn.innerText = originalText;
             document.getElementById('cancel-name').value = ""; // 清空輸入框
@@ -821,11 +844,13 @@
         btn.disabled = true;
         btn.innerText = "撤回中...";
     
-        sendData({ 
-            type: 'cancelVote', // 對應 GAS 後端的動作
+        sendData({
+            type: 'cancelVote',
             event_id: eventId,
-            name: name 
-        }).then(() => {
+            name: name,
+            cancel_token: loadCancelToken('vote', eventId, name)
+        }).then((result) => {
+            if (result && result.status === "success") removeCancelToken('vote', eventId, name);
             btn.disabled = false;
             btn.innerText = "確認撤回";
             document.getElementById('cancel-vote-name').value = "";
