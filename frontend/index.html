@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TCJH Volleyball Team</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
     <style>
         :root { 
             --primary: #1a365d; --secondary: #2b6cb0; --accent: #f6ad55;
@@ -17,7 +16,8 @@
             -webkit-tap-highlight-color: transparent;
         }
         body { 
-            font-family: 'Noto Sans TC', "PingFang TC", "Microsoft JhengHei", sans-serif; 
+            /* 只用裝置內建字型，不連外部字型服務 */
+            font-family: 'Noto Sans TC', "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", "Heiti TC", sans-serif;
             background: var(--bg); 
             margin: 0; 
             color: var(--primary);
@@ -307,7 +307,20 @@
 </div>
 
 <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbyp9nVm07TwfFTA5OQGOD34Ewh9SDQETXs-D1gbESPi2veqCsJ-TDAJaAB0jVpfjGjewA/exec"; 
+    // 防範 XSS 攻擊的字串過濾函式
+    function escapeHTML(str) {
+        if (typeof str !== 'string') return str;
+        return str.replace(/[&<>'"]/g, 
+            tag => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[tag] || tag)
+        );
+    }
+    const GAS_URL = "/api"; 
     let isAdminMode = false;
     let currentAdminPwd = sessionStorage.getItem('admin_pwd') || "";
 
@@ -361,11 +374,16 @@
     
             // 驗證密碼時需要回傳值，不使用 no-cors
             // 發布資料時若怕 CORS 失敗，才考慮切換模式
-            const fetchOptions = {
+
+	    const fetchOptions = {
                 method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify(payload)
             };
     
+
             const res = await fetch(GAS_URL, fetchOptions);
             const result = await res.json();
     
@@ -375,6 +393,7 @@
                     sessionStorage.setItem('admin_pwd', currentAdminPwd);
                     updateUIForAdmin();
                     showCreate();
+		    fetchData();
                 } else {
                     alert("操作成功！");
                     const inputs = document.querySelectorAll('input, textarea');
@@ -467,7 +486,7 @@
             let html = `
                 <div class="card" style="border: 2px solid var(--accent); position: relative; padding: 22px;">
                     <div class="badge-vote">🗳️ 意願調查中</div>
-                    <div class="card-title">${ev.title}${maxVoteInfo}</div> 
+                    <div class="card-title">${escapeHTML(ev.title)}${maxVoteInfo}</div>
                     <div style="color: var(--danger); font-size: 0.85rem; font-weight: 700; margin-bottom: 15px;">
                         ⏱️ 截止時間：${formattedDeadline}
                     </div>
@@ -499,16 +518,16 @@
                     // ----------------------------
         
                     html += `
-                    <div class="poll-option" onclick="handleVoteClick('${id}', '${ev.title}', '${targetOption}')">
+                    <div class="poll-option" onclick="handleVoteClick('${id}', '${encodeURIComponent(ev.title)}', '${encodeURIComponent(targetOption)}')">
                         <div class="poll-bar-bg">
                             <div class="poll-bar-fill" style="width: ${barWidth}%"></div>
                             <div class="poll-text">
-                                <span>${displayOpt}</span>
+                                <span>${escapeHTML(displayOpt)}</span>
                                 <span>${voteCount} 票</span>
                             </div>
                         </div>
                         <div style="font-size:0.75rem; color:var(--gray); margin-top:4px; padding-left:5px; font-weight:500;">
-                            👥 ${voters.length > 0 ? voters.join(', ') : '暫無人選擇此項'}
+                            👥 ${voters.length > 0 ? escapeHTML(voters.join(', ')) : '暫無人選擇此項'}
                         </div>
                     </div>`;
             });
@@ -526,7 +545,7 @@
     // 投票點擊觸發
     function handleVoteClick(id, title, choice) {
         // 開啟你已經寫好的 vote-overlay
-        openVote(id, title, choice);
+        openVote(id, decodeURIComponent(title), decodeURIComponent(choice));
     }
     
     // 3. 修改報名卡片函數 (對應物件格式)
@@ -553,8 +572,8 @@
                 badgeHtml = `<div class="ball-count-badge" style="background:#edf2f7; color:var(--gray); border-color:#cbd5e0;">🏁 活動已結束，共 ${count} 人參與</div>`;
                 
                 // 產生簡單的名單列表
-                const memberItems = memberList.map(m => 
-                    `<div class="reg-item" style="color:#718096;"><span>👤 ${m.trim()}</span></div>`
+                const memberItems = memberList.map(m =>
+                    `<div class="reg-item" style="color:#718096;"><span>👤 ${escapeHTML(m.trim())}</span></div>`
                 ).join('');
                 
                 contentHtml = `
@@ -582,22 +601,22 @@
                 
                 contentHtml = `
                     <div class="reg-area">
-                        ${eventRegs.map(r => `<div class="reg-item"><span>👤 ${r[1]}</span><span style="color:var(--secondary);">${r[2]} 球</span></div>`).join('') || '<div style="text-align:center; color:var(--gray); padding:10px;">尚未有人報名</div>'}
+                        ${eventRegs.map(r => `<div class="reg-item"><span>👤 ${escapeHTML(r[1])}</span><span style="color:var(--secondary);">${escapeHTML(String(r[2]))} 球</span></div>`).join('') || '<div style="text-align:center; color:var(--gray); padding:10px;">尚未有人報名</div>'}
                     </div>`;
             }
             
             return `
                 <div class="card ${isPast ? 'card-past' : ''}">
-                    <div class="card-title">${ev.title}</div>
+                    <div class="card-title">${escapeHTML(ev.title)}</div>
                     <div class="card-date">📅 ${formattedDate}</div>
-                    <div class="card-desc">${ev.desc}</div>
+                    <div class="card-desc">${escapeHTML(ev.desc)}</div>
                     
                     ${progressHtml}
                     ${badgeHtml}
                     ${contentHtml}
                     
                     <div class="card-actions" style="display:flex; flex-direction:column; gap:8px; margin-top:15px;">
-                        ${isPast ? '' : `<button class="btn btn-accent" onclick="openReg('${id}', '${ev.title}')">立即報名</button>`}
+                        ${isPast ? '' : `<button class="btn btn-accent" onclick="openReg('${id}', '${encodeURIComponent(ev.title)}')">立即報名</button>`}
                         ${!isPast ? `<button class="btn" style="background:#f1f5f9; color:var(--gray); font-size:0.9rem;" onclick="openCancel('${id}')">取消我的報名</button>` : ''}
                         ${isAdminMode ? `<button class="btn" style="background:#fff; color:var(--danger); border:1.5px solid #fed7d7; font-size:0.9rem; margin-top:5px;" onclick="deleteEvent('${id}')">🗑️ 刪除此場次</button>` : ''}
                     </div>
@@ -693,8 +712,28 @@
     function logout() { sessionStorage.removeItem('admin_pwd'); location.reload(); }
     function showCreate() { toggleDrawer(false); document.getElementById('admin-overlay').style.display = 'flex'; switchAdminUI(); }// 打開時先執行一次切換 UI 的邏輯，確保輸入框被畫出來
     function closeOverlay() { document.querySelectorAll('.overlay').forEach(e => e.style.display = 'none'); }
-    function openReg(id, title) { document.getElementById('reg-overlay').style.display = 'flex'; document.getElementById('reg-event-id').value = id; document.getElementById('reg-title').innerText = '報名：' + title; }
+    function openReg(id, title) { document.getElementById('reg-overlay').style.display = 'flex'; document.getElementById('reg-event-id').value = id; document.getElementById('reg-title').innerText = '報名：' + decodeURIComponent(title); }
     function openCancel(eventId) { document.getElementById('cancel-overlay').style.display = 'flex'; document.getElementById('cancel-event-id').value = eventId; }
+    function updateAnn() {
+        const content = document.getElementById('admin-ann-input').value.trim();
+        if(!content) return alert("請輸入公告內容");
+        
+        // 鎖定按鈕防止重複點擊
+        const btn = document.querySelector('button[onclick="updateAnn()"]');
+        const originText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = "發布中...";
+
+        sendData({
+            type: 'updateAnnouncement',
+            content: content
+        }).then(() => {
+            // 復原按鈕狀態並清空輸入框
+            btn.disabled = false;
+            btn.innerText = originText;
+            document.getElementById('admin-ann-input').value = "";
+        });
+    }
     function submitRegistration() {
             const name = document.getElementById('reg-name').value.trim();
             const ballsInput = document.getElementById('reg-balls').value;
@@ -759,7 +798,7 @@
     (async () => {
         if (currentAdminPwd) {
             try {
-                const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({type:'verify', adminPassword: currentAdminPwd}) });
+                const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({type:'verify', adminPassword: currentAdminPwd}) });
                 const r = await res.json(); 
                 if (r.status === "success") { isAdminMode = true; updateUIForAdmin(); }
             } catch(e) {}

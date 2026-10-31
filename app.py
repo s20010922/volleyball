@@ -2,14 +2,11 @@ import os
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
-# 前端與 API 同網域，只允許自己的網域跨來源呼叫
-CORS(app, origins=["https://tcjhvolley.felidae.tw"])
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///volleyball.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -323,6 +320,3 @@ def handle_post():
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": f"執行錯誤：{str(e)}"})
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)

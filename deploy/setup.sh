@@ -2,7 +2,7 @@
 # 一次性建立排球系統的獨立執行環境，從 repo 目錄執行：
 #   sudo bash deploy/setup.sh
 # 可重複執行：已存在的帳號、程式碼、venv、.env、rclone 設定都不會被覆蓋。
-# Nginx 與 SSL 憑證不在這裡處理（需要前端檔案與網域憑證，見 README）。
+# Nginx、SSL 憑證與 fail2ban 不在這裡處理（需要先有網域憑證，見 README）。
 set -euo pipefail
 
 SRC_DIR=$(cd "$(dirname "$0")/.." && pwd)
@@ -26,10 +26,10 @@ if [ ! -f "$APP_DIR/app.py" ]; then
     tar -C "$SRC_DIR" --exclude=./venv --exclude=./.env --exclude=./instance \
         --exclude=./__pycache__ --exclude=./logs -cf - . \
         | sudo -u "$DEPLOY_USER" tar -C "$APP_DIR" -xf -
-    # tar 會把目錄權限改回來源目錄的 775，這裡收回群組寫入權限
-    chmod -R g-w,o-w "$APP_DIR"
     echo "複製程式碼到 $APP_DIR"
 fi
+# tar 或 git clone（umask 002）都可能留下 775/664，收回群組與其他人的寫入權限
+chmod -R g-w,o-w "$APP_DIR"
 if [ ! -x "$APP_DIR/venv/bin/gunicorn" ]; then
     sudo -u "$DEPLOY_USER" python3 -m venv "$APP_DIR/venv"
     sudo -u "$DEPLOY_USER" "$APP_DIR/venv/bin/pip" install -q -r "$APP_DIR/requirements.txt"
@@ -44,6 +44,9 @@ if [ ! -f "$APP_DIR/.env" ]; then
     install -o volleyball -g volleyball -m 600 "$SRC_DIR/.env" "$APP_DIR/.env"
     echo "安裝 .env"
 fi
+# 直接在 /opt/volleyball 建立 .env 時（git clone 部署），擁有者是部署者，要交給服務帳號
+chown volleyball:volleyball "$APP_DIR/.env"
+chmod 600 "$APP_DIR/.env"
 
 # 4. rclone：只把 [gdrive] 這組授權複製給 volleyball，看不到其他服務的雲端授權
 if [ ! -f "$DATA_DIR/rclone.conf" ] && [ -f "$RCLONE_SRC" ]; then
