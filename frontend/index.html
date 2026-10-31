@@ -442,7 +442,11 @@
     async function fetchData() {
         document.getElementById('loading-overlay').style.display = 'flex';
         try {
-            const resp = await fetch(GAS_URL);
+            // 一般訪客拿到的名字是遮罩過的（王O明）；管理員改用 POST 取得全名
+            let resp = isAdminMode
+                ? await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'getData', adminPassword: currentAdminPwd }) })
+                : await fetch(GAS_URL);
+            if (!resp.ok && isAdminMode) resp = await fetch(GAS_URL);  // 密碼失效或太頻繁時，退回一般資料
             const data = await resp.json();
             document.getElementById('announcement-text').innerText = data.announcement;
             renderAll(data);

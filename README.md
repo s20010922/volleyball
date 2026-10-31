@@ -62,6 +62,7 @@ deploy/
 只有 `/api` 一個路徑，`POST` 用 JSON body 的 `type` 欄位區分動作，必須帶 `Content-Type: application/json`。
 
 **`GET /api`**：回傳公告、所有場次（含封存）、報名與投票紀錄。**只讀不寫**。
+名字一律遮罩（王小明 → 王O明、王明 → 王O、歐陽小明 → 歐OO明），資料庫裡仍存全名；管理員登入後前端改用 `getData` 取得全名。
 
 到期處理由 cron 每分鐘執行 `flask --app app maintenance`：投票已截止的場次依最高票定案（沒人投票就封存），
 時間已過的場次移入 `Archive`。在排程跑到之前，過期場次已經不能報名、截止的投票也不能再投。
@@ -71,6 +72,7 @@ deploy/
 | `type` | 管理密碼 | 說明 |
 |--------|:---:|------|
 | `verify` | ✓ | 驗證管理密碼 |
+| `getData` | ✓ | 與 `GET /api` 相同，但名字不遮罩 |
 | `updateAnnouncement` | ✓ | 更新公告 |
 | `createEvent` | ✓ | 新增場次（`active` 或 `vote`） |
 | `convertToActive` | ✓ | 投票場次手動轉為開放報名，可同時改標題／日期 |

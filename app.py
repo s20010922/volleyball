@@ -234,29 +234,41 @@ def check_cancel_permission(data, token_hash):
         return None
     return jsonify({"status": "fail", "message": "只能在報名時使用的手機或電腦上取消。若換了裝置，請聯絡管理員協助。"})
 
+def mask_name(name):
+    """公開頁面只顯示遮罩後的名字：王小明 → 王O明、王明 → 王O、歐陽小明 → 歐OO明"""
+    name = (name or "").strip()
+    if len(name) <= 1:
+        return name
+    if len(name) == 2:
+        return name[0] + "O"
+    return name[0] + "O" * (len(name) - 2) + name[-1]
+
+def build_snapshot(show_full_names=False):
+    show = (lambda n: n) if show_full_names else mask_name
+    config = Config.query.first()
+    events = [format_event_output(e, False) for e in Event.query.all()]
+    for a in Archive.query.all():
+        out = format_event_output(a, True)
+        if out["options"]:
+            out["options"] = ", ".join(show(m.strip()) for m in out["options"].split(","))
+        events.append(out)
+    return {
+        "status": "success",
+        "announcement": config.announcement if config else "",
+        "events": events,
+        "votes": [[v.event_id, show(v.name), v.choice] for v in Vote.query.all()],
+        "regs": [[r.event_id, show(r.name), r.balls, r.note] for r in Registration.query.all()]
+    }
+
 # ==========================================
 # API 路由
 # ==========================================
 @app.route('/api', methods=['GET'])
 def get_data():
     # 只讀不寫：到期結算與封存改由 cron 執行 `flask --app app maintenance`
+    # 公開資料的名字一律遮罩；管理員要看全名請用 POST type=getData
     try:
-        config = Config.query.first()
-        active_events = Event.query.all()
-        archived_events = Archive.query.all()
-        votes = Vote.query.all()
-        regs = Registration.query.all()
-
-        all_events = [format_event_output(e, False) for e in active_events] + \
-                     [format_event_output(a, True) for a in archived_events]
-
-        return jsonify({
-            "status": "success",
-            "announcement": config.announcement if config else "",
-            "events": all_events,
-            "votes": [[v.event_id, v.name, v.choice] for v in votes],
-            "regs": [[r.event_id, r.name, r.balls, r.note] for r in regs]
-        })
+        return jsonify(build_snapshot())
     except Exception:
         app.logger.exception("GET /api 失敗")
         return jsonify({"status": "error", "message": "讀取資料失敗，請稍後再試"}), 500
@@ -270,7 +282,7 @@ def handle_post():
             return jsonify({"status": "error", "message": "資料格式錯誤"}), 400
 
         action_type = data.get('type')
-        admin_actions = ['verify', 'updateAnnouncement', 'createEvent', 'deleteEvent', 'convertToActive', 'archiveEvent']
+        admin_actions = ['verify', 'getData', 'updateAnnouncement', 'createEvent', 'deleteEvent', 'convertToActive', 'archiveEvent']
 
         if action_type in admin_actions:
             if not verify_admin(data.get('adminPassword')):
@@ -278,6 +290,9 @@ def handle_post():
 
         if action_type == 'verify':
             return jsonify({"status": "success"})
+
+        elif action_type == 'getData':
+            return jsonify(build_snapshot(show_full_names=True))
 
         elif action_type == 'updateAnnouncement':
             content = get_text(data, 'content', '公告', 5000)
